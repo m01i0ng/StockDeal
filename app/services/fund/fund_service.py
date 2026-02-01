@@ -91,6 +91,32 @@ def _latest_nav_money_fund(code: str) -> FundNav:
     return FundNav(date=latest["净值日期"], nav=nav, nav_7d=nav_7d)
 
 
+def _resolve_nav_by_date_open_fund(code: str, date_value: datetime.date) -> float:
+    nav_df = ak.fund_open_fund_info_em(symbol=code, indicator="单位净值走势")
+    target = date_value.isoformat()
+    matched = nav_df[nav_df["净值日期"].astype(str) == target]
+    if matched.empty:
+        raise ValueError(f"未找到基金净值数据: {code} {target}")
+    return float(matched.iloc[-1]["单位净值"])
+
+
+def _resolve_nav_by_date_money_fund(code: str, date_value: datetime.date) -> float:
+    nav_df = ak.fund_money_fund_info_em(symbol=code)
+    target = date_value.isoformat()
+    matched = nav_df[nav_df["净值日期"].astype(str) == target]
+    if matched.empty:
+        raise ValueError(f"未找到基金净值数据: {code} {target}")
+    return float(matched.iloc[-1]["每万份收益"])
+
+
+def resolve_fund_nav_by_date(code: str, date_value: datetime.date) -> float:
+    """按日期获取基金净值。"""
+    meta = _resolve_fund_by_code(code)
+    if "货币型" in meta["type"]:
+        return _resolve_nav_by_date_money_fund(meta["code"], date_value)
+    return _resolve_nav_by_date_open_fund(meta["code"], date_value)
+
+
 def _extract_quarter(value: str, year: int) -> int | None:
     """从季度描述中提取季度数"""
     if not isinstance(value, str):

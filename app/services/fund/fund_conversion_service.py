@@ -8,7 +8,6 @@ from app.models.db.models import FundAccount, FundConversion, FundTransaction
 from app.models.enums import FundTradeType
 from app.models.schemas import FundConversionCreateRequest, FundConversionResponse
 from app.services.fund import fund_holding_service
-from app.time_utils import ensure_cst
 
 
 def create_conversion(
@@ -20,7 +19,10 @@ def create_conversion(
     if account is None:
         raise FundAccountNotFoundError(f"未找到基金账户: {payload.account_id}")
 
-    trade_time = ensure_cst(payload.trade_time)
+    trade_time = fund_holding_service._resolve_trade_time(
+        payload.trade_date,
+        payload.is_after_cutoff,
+    )
     conversion = FundConversion(
         account_id=payload.account_id,
         from_fund_code=str(payload.from_fund_code).strip(),
@@ -38,10 +40,8 @@ def create_conversion(
         trade_type=FundTradeType.sell,
         amount=payload.from_amount,
         fee_percent=payload.from_fee_percent,
-        confirmed_nav=payload.from_confirmed_nav,
-        trade_time=trade_time,
-        holding_amount=None,
-        profit_amount=None,
+        trade_date=payload.trade_date,
+        is_after_cutoff=payload.is_after_cutoff,
         remark=payload.remark,
         conversion_id=conversion.id,
         commit=False,
@@ -53,10 +53,8 @@ def create_conversion(
         trade_type=FundTradeType.buy,
         amount=payload.to_amount,
         fee_percent=payload.to_fee_percent,
-        confirmed_nav=payload.to_confirmed_nav,
-        trade_time=trade_time,
-        holding_amount=None,
-        profit_amount=None,
+        trade_date=payload.trade_date,
+        is_after_cutoff=payload.is_after_cutoff,
         remark=payload.remark,
         conversion_id=conversion.id,
         commit=False,

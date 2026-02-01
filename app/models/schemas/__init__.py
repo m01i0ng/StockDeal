@@ -220,22 +220,26 @@ class FundHoldingTransactionCreateRequest(BaseModel):
     account_id: int = Field(..., description="账户 ID", examples=[1])
     fund_code: str = Field(..., description="基金代码", examples=["161725"])
     trade_type: FundTradeType = Field(..., description="交易方向")
-    status: FundTradeStatus | None = Field(
-        default=None, description="交易状态（自动计算）"
-    )
     amount: float = Field(..., description="交易金额", examples=[1000.0])
     fee_percent: float | None = Field(
         default=None, description="手续费比例", examples=[0.15]
     )
-    confirmed_nav: float = Field(..., description="确认净值", examples=[1.2345])
-    trade_time: datetime | None = Field(default=None, description="交易时间")
-    holding_amount: float | None = Field(
-        default=None, description="持有金额", examples=[12000.0]
-    )
-    profit_amount: float | None = Field(
-        default=None, description="盈利金额", examples=[2000.0]
-    )
+    trade_date: dt_date = Field(..., description="交易日期", examples=["2025-01-31"])
+    is_after_cutoff: bool = Field(default=False, description="是否为15点后交易")
     remark: str | None = Field(default=None, description="备注")
+
+
+class FundHoldingCreateRequest(BaseModel):
+    account_id: int = Field(..., description="账户 ID", examples=[1])
+    fund_code: str = Field(..., description="基金代码", examples=["161725"])
+    total_amount: float = Field(..., description="总额", examples=[12000.0])
+    profit_amount: float = Field(..., description="收益额", examples=[2000.0])
+    remark: str | None = Field(default=None, description="备注")
+
+
+class FundHoldingUpdateRequest(BaseModel):
+    total_amount: float = Field(..., description="持仓金额", examples=[10000.0])
+    total_shares: float = Field(..., description="持仓份额", examples=[12345.67])
 
 
 class FundHoldingTransactionResponse(BaseModel):
@@ -266,15 +270,12 @@ class FundConversionCreateRequest(BaseModel):
     from_fee_percent: float | None = Field(
         default=None, description="转出手续费比例", examples=[0.15]
     )
-    from_confirmed_nav: float = Field(
-        ..., description="转出确认净值", examples=[1.2345]
-    )
     to_amount: float = Field(..., description="转入金额", examples=[980.0])
     to_fee_percent: float | None = Field(
         default=None, description="转入手续费比例", examples=[0.15]
     )
-    to_confirmed_nav: float = Field(..., description="转入确认净值", examples=[1.3456])
-    trade_time: datetime | None = Field(default=None, description="交易时间")
+    trade_date: dt_date = Field(..., description="交易日期", examples=["2025-01-31"])
+    is_after_cutoff: bool = Field(default=False, description="是否为15点后交易")
     remark: str | None = Field(default=None, description="备注")
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,11 +9,123 @@ from app.exceptions import FundAccountNotFoundError, FundHoldingNotFoundError
 from app.models.db.models import FundAccount, FundHolding, FundTransaction
 from app.models.enums import FundTradeStatus, FundTradeType
 from app.models.schemas import (
+    FundHoldingCreateRequest,
+    FundHoldingPositionResponse,
     FundHoldingTransactionCreateRequest,
     FundHoldingTransactionResponse,
+    FundHoldingUpdateRequest,
 )
+from app.services.fund import fund_service
 from app.services.trading_calendar import is_trading_day
 from app.time_utils import cst_now, ensure_cst
+from app.utils.parsing import parse_float
+
+
+def create_holding(
+    db: Session,
+    payload: FundHoldingCreateRequest,
+) -> FundHoldingTransactionResponse:
+    """添加持仓并生成确认交易记录。"""
+    account = db.get(FundAccount, payload.account_id)
+    if account is None:
+        raise FundAccountNotFoundError(f"未找到基金账户: {payload.account_id}")
+
+    resolved_fund_code = str(payload.fund_code).strip()
+    existing = (
+        db.execute(
+            select(FundHolding).where(
+                FundHolding.account_id == payload.account_id,
+                FundHolding.fund_code == resolved_fund_code,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if existing is not None:
+        raise ValueError("持仓已存在")
+
+    snapshot = fund_service.get_fund_snapshot(resolved_fund_code)
+    confirmed_nav = float(snapshot.nav.nav)
+    confirmed_nav_date = _ensure_date(snapshot.nav.date)
+    if confirmed_nav <= 0:
+        raise ValueError("确认净值必须大于 0")
+
+    holding_amount = payload.total_amount + payload.profit_amount
+    if holding_amount <= 0:
+        raise ValueError("持仓总额必须大于 0")
+    shares = holding_amount / confirmed_nav
+
+    holding = FundHolding(
+        account_id=payload.account_id,
+        fund_code=resolved_fund_code,
+        total_amount=payload.total_amount,
+        total_shares=shares,
+    )
+    db.add(holding)
+    db.flush()
+
+    transaction = FundTransaction(
+        account_id=payload.account_id,
+        holding_id=holding.id,
+        conversion_id=None,
+        fund_code=resolved_fund_code,
+        trade_type=FundTradeType.buy,
+        status=FundTradeStatus.confirmed,
+        amount=payload.total_amount,
+        fee_percent=0.0,
+        fee_amount=0.0,
+        confirmed_nav=confirmed_nav,
+        confirmed_nav_date=confirmed_nav_date,
+        shares=shares,
+        holding_amount=holding_amount,
+        profit_amount=payload.profit_amount,
+        trade_time=_resolve_trade_time(confirmed_nav_date, False),
+        remark=payload.remark,
+    )
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+
+    return _build_transaction_response(transaction)
+
+
+def get_holding_detail(
+    db: Session,
+    holding_id: int,
+) -> FundHoldingPositionResponse:
+    """获取持仓详情。"""
+    holding = db.get(FundHolding, holding_id)
+    if holding is None:
+        raise FundHoldingNotFoundError(f"未找到基金持仓: {holding_id}")
+    return _build_holding_position(holding)
+
+
+def update_holding(
+    db: Session,
+    holding_id: int,
+    payload: FundHoldingUpdateRequest,
+) -> FundHoldingPositionResponse:
+    """更新持仓信息。"""
+    holding = db.get(FundHolding, holding_id)
+    if holding is None:
+        raise FundHoldingNotFoundError(f"未找到基金持仓: {holding_id}")
+    if payload.total_amount < 0 or payload.total_shares < 0:
+        raise ValueError("持仓金额或份额不能为负数")
+
+    holding.total_amount = payload.total_amount
+    holding.total_shares = payload.total_shares
+    db.commit()
+    db.refresh(holding)
+    return _build_holding_position(holding)
+
+
+def delete_holding(db: Session, holding_id: int) -> None:
+    """删除持仓记录。"""
+    holding = db.get(FundHolding, holding_id)
+    if holding is None:
+        raise FundHoldingNotFoundError(f"未找到基金持仓: {holding_id}")
+    db.delete(holding)
+    db.commit()
 
 
 def create_transaction(
@@ -28,10 +140,8 @@ def create_transaction(
         trade_type=payload.trade_type,
         amount=payload.amount,
         fee_percent=payload.fee_percent,
-        confirmed_nav=payload.confirmed_nav,
-        trade_time=payload.trade_time,
-        holding_amount=payload.holding_amount,
-        profit_amount=payload.profit_amount,
+        trade_date=payload.trade_date,
+        is_after_cutoff=payload.is_after_cutoff,
         remark=payload.remark,
         conversion_id=None,
         commit=True,
@@ -98,6 +208,29 @@ def confirm_pending_transactions(db: Session) -> int:
             db.flush()
             transaction.holding_id = holding.id
 
+        fee_amount = transaction.amount * transaction.fee_percent / 100
+        share_base_amount = transaction.amount - fee_amount
+        if share_base_amount <= 0:
+            raise ValueError("份额计算基础金额必须大于 0")
+
+        confirmed_nav = fund_service.resolve_fund_nav_by_date(
+            transaction.fund_code,
+            transaction.confirmed_nav_date,
+        )
+        if confirmed_nav <= 0:
+            raise ValueError("确认净值必须大于 0")
+
+        shares = share_base_amount / confirmed_nav
+
+        if transaction.trade_type == FundTradeType.sell:
+            if holding.total_amount < transaction.amount:
+                raise ValueError("减仓金额不能超过当前持仓金额")
+            if holding.total_shares < shares:
+                raise ValueError("减仓份额不能超过当前持仓份额")
+
+        transaction.confirmed_nav = confirmed_nav
+        transaction.shares = shares
+
         _apply_holding_change(
             holding,
             transaction.trade_type,
@@ -118,10 +251,8 @@ def _create_transaction_record(
     trade_type: FundTradeType,
     amount: float,
     fee_percent: float | None,
-    confirmed_nav: float,
-    trade_time: datetime | None,
-    holding_amount: float | None,
-    profit_amount: float | None,
+    trade_date: datetime.date,
+    is_after_cutoff: bool,
     remark: str | None,
     conversion_id: int | None,
     commit: bool,
@@ -159,36 +290,30 @@ def _create_transaction_record(
         db.flush()
 
     fee_amount = amount * (resolved_fee_percent or 0.0) / 100
-    payload = FundHoldingTransactionCreateRequest(
-        account_id=account_id,
-        fund_code=resolved_fund_code,
-        trade_type=trade_type,
-        amount=amount,
-        fee_percent=resolved_fee_percent,
-        confirmed_nav=confirmed_nav,
-        trade_time=trade_time,
-        holding_amount=holding_amount,
-        profit_amount=profit_amount,
-        remark=remark,
-    )
-    share_base_amount = _resolve_share_base_amount(payload, fee_amount)
+    share_base_amount = amount - fee_amount
     if share_base_amount <= 0:
         raise ValueError("份额计算基础金额必须大于 0")
-    if confirmed_nav <= 0:
-        raise ValueError("确认净值必须大于 0")
 
-    shares = share_base_amount / confirmed_nav
-    resolved_trade_time = ensure_cst(trade_time)
-    confirmed_nav_date = _resolve_confirmed_nav_date(resolved_trade_time)
+    confirmed_nav_date = _resolve_confirmed_nav_date(trade_date, is_after_cutoff)
     status = _resolve_trade_status(confirmed_nav_date)
+    resolved_trade_time = _resolve_trade_time(trade_date, is_after_cutoff)
 
-    if trade_type == FundTradeType.sell:
-        if holding.total_amount < amount:
-            raise ValueError("减仓金额不能超过当前持仓金额")
-        if holding.total_shares < shares:
-            raise ValueError("减仓份额不能超过当前持仓份额")
-
+    confirmed_nav = 0.0
+    shares = 0.0
     if status == FundTradeStatus.confirmed:
+        confirmed_nav = fund_service.resolve_fund_nav_by_date(
+            resolved_fund_code, confirmed_nav_date
+        )
+        if confirmed_nav <= 0:
+            raise ValueError("确认净值必须大于 0")
+        shares = share_base_amount / confirmed_nav
+
+        if trade_type == FundTradeType.sell:
+            if holding.total_amount < amount:
+                raise ValueError("减仓金额不能超过当前持仓金额")
+            if holding.total_shares < shares:
+                raise ValueError("减仓份额不能超过当前持仓份额")
+
         _apply_holding_change(holding, trade_type, amount, shares)
 
     transaction = FundTransaction(
@@ -204,8 +329,6 @@ def _create_transaction_record(
         confirmed_nav=confirmed_nav,
         confirmed_nav_date=confirmed_nav_date,
         shares=shares,
-        holding_amount=holding_amount,
-        profit_amount=profit_amount,
         trade_time=resolved_trade_time,
         remark=remark,
     )
@@ -242,17 +365,37 @@ def _build_transaction_response(
     )
 
 
-def _resolve_share_base_amount(
-    payload: FundHoldingTransactionCreateRequest,
-    fee_amount: float,
-) -> float:
-    if (
-        payload.trade_type == FundTradeType.buy
-        and payload.holding_amount is not None
-        and payload.profit_amount is not None
-    ):
-        return payload.holding_amount - payload.profit_amount - fee_amount
-    return payload.amount - fee_amount
+def _build_holding_position(holding: FundHolding) -> FundHoldingPositionResponse:
+    estimate = fund_service.get_fund_realtime_estimate(holding.fund_code)
+    estimated_nav = parse_float(estimate.estimated_nav)
+    if estimated_nav is None:
+        estimated_nav = parse_float(estimate.nav.nav)
+    estimated_value = None
+    estimated_profit = None
+    estimated_profit_percent = None
+    if estimated_nav is not None:
+        estimated_value = holding.total_shares * estimated_nav
+        estimated_profit = estimated_value - holding.total_amount
+        if holding.total_amount > 0:
+            estimated_profit_percent = estimated_profit / holding.total_amount * 100
+    return FundHoldingPositionResponse(
+        holding_id=holding.id,
+        account_id=holding.account_id,
+        fund_code=holding.fund_code,
+        total_amount=holding.total_amount,
+        total_shares=holding.total_shares,
+        estimated_nav=estimated_nav,
+        estimated_value=estimated_value,
+        estimated_profit=estimated_profit,
+        estimated_profit_percent=estimated_profit_percent,
+        updated_at=holding.updated_at,
+    )
+
+
+def _ensure_date(value: date | str) -> date:
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))
 
 
 def _apply_holding_change(
@@ -271,15 +414,24 @@ def _apply_holding_change(
         raise ValueError("持仓金额或份额不能为负数")
 
 
-def _resolve_confirmed_nav_date(trade_time: datetime | None) -> datetime.date:
-    current = ensure_cst(trade_time)
-    date_part = current.date()
-    if _is_trading_day(date_part) and current.hour < 15:
-        return date_part
-    next_day = date_part + timedelta(days=1)
+def _resolve_confirmed_nav_date(
+    trade_date: datetime.date,
+    is_after_cutoff: bool,
+) -> datetime.date:
+    if _is_trading_day(trade_date) and not is_after_cutoff:
+        return trade_date
+    next_day = trade_date + timedelta(days=1)
     while not _is_trading_day(next_day):
         next_day += timedelta(days=1)
     return next_day
+
+
+def _resolve_trade_time(
+    trade_date: datetime.date,
+    is_after_cutoff: bool,
+) -> datetime:
+    cutoff_time = time(15, 1) if is_after_cutoff else time(14, 59)
+    return ensure_cst(datetime.combine(trade_date, cutoff_time))
 
 
 def _resolve_trade_status(confirmed_nav_date: datetime.date) -> FundTradeStatus:

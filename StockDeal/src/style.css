@@ -3,6 +3,9 @@
 
 :root {
   color-scheme: light dark;
+  --app-header-height: 46px;
+  --app-tabbar-height: 50px;
+  --app-action-height: 64px;
 }
 
 .van-theme-light body {
@@ -21,26 +24,162 @@
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 #app {
-  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100%;
 }
 
 .app-shell {
-  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
 .app-content {
-  flex: 1;
-  padding: 64px 16px 88px;
+  flex: 1 1 auto;
+  padding: calc(var(--app-header-height) + env(safe-area-inset-top, 0px)) 16px
+    calc(var(--app-tabbar-height) + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.app-content.is-action {
+  padding-bottom: calc(var(--app-action-height) + env(safe-area-inset-bottom, 0px));
+}
+
+.app-content.is-compact {
+  padding-bottom: 16px;
+}
+
+.app-action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: rgba(247, 248, 250, 0.96);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
+  z-index: 10;
+}
+
+.app-action-bar.is-tabbar {
+  padding: 0 0 env(safe-area-inset-bottom, 0px);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.app-action-bar.is-tabbar .van-tabbar {
+  height: var(--app-tabbar-height);
+}
+
+.van-theme-dark .app-action-bar.is-tabbar {
+  background: rgba(31, 31, 31, 0.96);
+}
+
+.app-action-bar.is-double {
+  display: grid;
+  gap: 10px;
+}
+
+.van-theme-dark .app-action-bar {
+  background: rgba(31, 31, 31, 0.92);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.account-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(64, 100, 255, 0.12), rgba(64, 169, 255, 0.08));
+}
+
+.van-theme-dark .account-hero {
+  background: linear-gradient(135deg, rgba(64, 100, 255, 0.2), rgba(64, 169, 255, 0.12));
+}
+
+.account-label {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.account-value {
+  margin: 6px 0 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.account-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.account-profit {
+  margin: 4px 0 0;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+.van-theme-dark .account-profit {
+  color: #22c55e;
+}
+
+.account-profit.is-negative {
+  color: #ef4444;
+}
+
+.transaction-tabs {
+  margin-top: 8px;
+}
+
+.transaction-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0 8px;
+}
+
+.transaction-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.account-create-button {
+  margin-top: 16px;
+}
+
+.form-card {
+  padding: 12px 0;
+}
+
+.form-actions {
+  margin-top: 12px;
+}
+
+.detail-tabbar {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.detail-tabbar .van-tabbar-item {
+  color: #ef4444;
+}
+
+.van-theme-dark .detail-tabbar {
+  border-top-color: rgba(148, 163, 184, 0.3);
 }
 
 .page-section {

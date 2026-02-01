@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     cache_warmup_enabled: bool = True
     db_auto_migrate: bool = True
     scheduler_enabled: bool = True
-    scheduler_confirm_hour: int = 15
-    scheduler_confirm_minute: int = 5
+    scheduler_confirm_hour: int = 9
+    scheduler_confirm_minute: int = 0
     redis_url: str = "redis://localhost:6379/0"
     database_url: str | None = None
     mysql_host: str = "localhost"

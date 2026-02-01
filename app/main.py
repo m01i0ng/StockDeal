@@ -5,6 +5,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
@@ -56,6 +57,13 @@ app = FastAPI(
     ],
     lifespan=lifespan,
 )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=False,
+)
 app.include_router(fund_router)
 app.include_router(fund_account_router)
 app.include_router(fund_holding_router)
@@ -105,6 +113,7 @@ async def request_logging_middleware(request: Request, call_next):
 
 @app.exception_handler(FundNotFoundError)
 async def handle_fund_not_found(_: FastAPI, exc: FundNotFoundError) -> JSONResponse:
+    logging.getLogger("app.error").exception("基金未找到: %s", exc)
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
@@ -112,9 +121,11 @@ async def handle_fund_not_found(_: FastAPI, exc: FundNotFoundError) -> JSONRespo
 async def handle_account_not_found(
     _: FastAPI, exc: FundAccountNotFoundError
 ) -> JSONResponse:
+    logging.getLogger("app.error").exception("基金账户未找到: %s", exc)
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
 @app.exception_handler(ValueError)
 async def handle_value_error(_: FastAPI, exc: ValueError) -> JSONResponse:
+    logging.getLogger("app.error").exception("请求参数错误: %s", exc)
     return JSONResponse(status_code=400, content={"detail": str(exc)})

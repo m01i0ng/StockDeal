@@ -133,14 +133,24 @@ export interface FundHoldingTransactionCreateRequest {
   account_id: number;
   fund_code: string;
   trade_type: FundTradeType;
-  status?: FundTradeStatus | null;
   amount: number;
   fee_percent?: number | null;
-  confirmed_nav: number;
-  trade_time?: string | null;
-  holding_amount?: number | null;
-  profit_amount?: number | null;
+  trade_date: string;
+  is_after_cutoff?: boolean;
   remark?: string | null;
+}
+
+export interface FundHoldingCreateRequest {
+  account_id: number;
+  fund_code: string;
+  total_amount: number;
+  profit_amount: number;
+  remark?: string | null;
+}
+
+export interface FundHoldingUpdateRequest {
+  total_amount: number;
+  total_shares: number;
 }
 
 export interface FundHoldingTransactionResponse {
@@ -169,11 +179,10 @@ export interface FundConversionCreateRequest {
   to_fund_code: string;
   from_amount: number;
   from_fee_percent?: number | null;
-  from_confirmed_nav: number;
   to_amount: number;
   to_fee_percent?: number | null;
-  to_confirmed_nav: number;
-  trade_time?: string | null;
+  trade_date: string;
+  is_after_cutoff?: boolean;
   remark?: string | null;
 }
 

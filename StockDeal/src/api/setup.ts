@@ -1,4 +1,4 @@
-import { apiClient } from "./http";
+import { apiClient, normalizeApiError } from "./http";
 
 const TRACE_ID_STORAGE_KEY = "stockdeal-trace-id";
 
@@ -34,13 +34,19 @@ export const setupApiInterceptors = () => {
     };
   });
 
-  apiClient.interceptors.response.use((response) => response, (error) => {
-    if (error?.response?.data && typeof error.response.data === "object") {
-      const detail = (error.response.data as { detail?: string }).detail;
-      if (detail) {
-        error.message = detail;
+  apiClient.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error?.response?.data && typeof error.response.data === "object") {
+        const detail = (error.response.data as { detail?: string }).detail;
+        if (detail) {
+          error.message = detail;
+        }
       }
+      if (error && typeof error === "object" && "isAxiosError" in error) {
+        return Promise.reject(normalizeApiError(error));
+      }
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
-  });
+  );
 };

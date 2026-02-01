@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models.schemas import (
     FundConversionCreateRequest,
     FundConversionResponse,
+    FundHoldingCreateRequest,
     FundHoldingPositionResponse,
     FundHoldingTransactionCreateRequest,
     FundHoldingTransactionResponse,
+    FundHoldingUpdateRequest,
 )
 from app.services.fund import (
     fund_account_service,
@@ -32,6 +34,66 @@ def list_fund_holdings(
 ) -> list[FundHoldingPositionResponse]:
     """获取账户持仓列表。"""
     return fund_account_service.list_account_holdings(db, account_id, fund_code)
+
+
+@router.post(
+    "",
+    response_model=FundHoldingTransactionResponse,
+    summary="新增持仓",
+    description="新增持仓记录并生成确认交易。",
+    response_description="交易记录",
+)
+def create_fund_holding(
+    payload: FundHoldingCreateRequest,
+    db: Session = Depends(get_db),
+) -> FundHoldingTransactionResponse:
+    """新增持仓。"""
+    return fund_holding_service.create_holding(db, payload)
+
+
+@router.get(
+    "/{holding_id}",
+    response_model=FundHoldingPositionResponse,
+    summary="持仓详情",
+    description="根据持仓 ID 获取持仓详情。",
+    response_description="持仓详情",
+)
+def get_fund_holding_detail(
+    holding_id: int = Path(..., description="持仓 ID", examples=[1]),
+    db: Session = Depends(get_db),
+) -> FundHoldingPositionResponse:
+    """获取持仓详情。"""
+    return fund_holding_service.get_holding_detail(db, holding_id)
+
+
+@router.put(
+    "/{holding_id}",
+    response_model=FundHoldingPositionResponse,
+    summary="更新持仓",
+    description="更新持仓金额与份额。",
+    response_description="持仓详情",
+)
+def update_fund_holding(
+    payload: FundHoldingUpdateRequest,
+    holding_id: int = Path(..., description="持仓 ID", examples=[1]),
+    db: Session = Depends(get_db),
+) -> FundHoldingPositionResponse:
+    """更新持仓。"""
+    return fund_holding_service.update_holding(db, holding_id, payload)
+
+
+@router.delete(
+    "/{holding_id}",
+    summary="删除持仓",
+    description="删除持仓记录。",
+)
+def delete_fund_holding(
+    holding_id: int = Path(..., description="持仓 ID", examples=[1]),
+    db: Session = Depends(get_db),
+) -> dict:
+    """删除持仓。"""
+    fund_holding_service.delete_holding(db, holding_id)
+    return {"success": True}
 
 
 @router.post(
