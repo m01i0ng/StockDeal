@@ -1,0 +1,16 @@
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.env
+.env
+.vscode
+.idea
+.ipynb_checkpoints
+*.ipynb

@@ -1,0 +1,33 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment variables
+.env
+
+logs/
+*.log
+
+# START Ruler Generated Files
+/.mcp.json
+/.mcp.json.bak
+/.trae/rules/project_rules.md
+/.trae/rules/project_rules.md.bak
+/.vscode/mcp.json
+/.vscode/mcp.json.bak
+/.windsurf/mcp_config.json
+/.windsurf/mcp_config.json.bak
+/AGENTS.md
+/AGENTS.md.bak
+/CLAUDE.md
+/CLAUDE.md.bak
+/opencode.json
+/opencode.json.bak
+# END Ruler Generated Files
