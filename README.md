@@ -81,21 +81,21 @@ LOG_BACKUP_COUNT=10
 2. 批量获取持仓股票的实时涨跌幅（百分比）。
 3. 对每只股票计算贡献值：
 
-   $$
-   \text{贡献值}_i = \text{持仓占比}_i \times \frac{\text{股票涨跌幅}_i}{100}
-   $$
+   ```math
+   	ext{贡献值}_i = \text{持仓占比}_i \times \frac{\text{股票涨跌幅}_i}{100}
+   ```
 
 4. 将所有股票贡献值求和，得到基金预估涨幅：
 
-   $$
-   \text{预估涨幅} = \sum_{i=1}^{n} \text{贡献值}_i
-   $$
+   ```math
+   	ext{预估涨幅} = \sum_{i=1}^{n} \text{贡献值}_i
+   ```
 
 5. 根据最新净值计算预估净值：
 
-   $$
-   \text{预估净值} = \text{最新净值} \times \left(1 + \frac{\text{预估涨幅}}{100}\right)
-   $$
+   ```math
+   	ext{预估净值} = \text{最新净值} \times \left(1 + \frac{\text{预估涨幅}}{100}\right)
+   ```
 
 若某只股票缺失行情，则该股票会进入 `skipped` 列表，不参与贡献值计算。
 
